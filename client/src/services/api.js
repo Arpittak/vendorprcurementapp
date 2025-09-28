@@ -1,9 +1,10 @@
+
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5001/api';
+// Use relative URL - this will work for both localhost and ngrok
+const API_BASE_URL = '/api';
 
 // Create axios instance with default config
-
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -32,7 +33,7 @@ api.interceptors.response.use(
     console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }
-);
+)
 
 export const vendorProcurementApi = {
   // Get all vendors with optional search

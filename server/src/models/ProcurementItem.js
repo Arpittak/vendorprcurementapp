@@ -3,30 +3,23 @@ const { DatabaseError } = require('../utils/errors');
 
 class ProcurementItem {
   constructor(data) {
+    // Core procurement item data
     this.id = data.id;
-    this.procurementId = data.procurement_id;
-    this.stoneId = data.stone_id;
-    this.hsnCodeId = data.hsn_code_id;
-    this.inventoryItemId = data.inventory_item_id;
     this.lengthMm = data.length_mm;
     this.widthMm = data.width_mm;
     this.thicknessMm = data.thickness_mm;
-    this.isCalibrated = data.is_calibrated;
-    this.edgesTypeId = data.edges_type_id;
-    this.finishingTypeId = data.finishing_type_id;
-    this.stageId = data.stage_id;
     this.quantity = data.quantity;
     this.units = data.units;
-    this.rateUnit = data.rate_unit;
     this.rate = data.rate;
+    this.rateUnit = data.rate_unit;
     this.itemAmount = data.item_amount;
-    this.comments = data.comments;
-    this.createdAt = data.created_at;
 
-    // Related data
+    // Related data from joins
     this.stoneName = data.stone_name;
     this.stoneType = data.stone_type;
     this.taxPercentage = data.tax_percentage;
+    this.invoiceDate = data.invoice_date;
+    this.hsnCode = data.hsn_code;
     this.vendorName = data.vendor_name;
   }
 
@@ -49,16 +42,26 @@ class ProcurementItem {
     try {
       let query = `
         SELECT 
-          pi.*,
+          pi.id,
+          pi.length_mm,
+          pi.width_mm,
+          pi.thickness_mm,
+          pi.quantity,
+          pi.units,
+          pi.rate,
+          pi.rate_unit,
+          pi.item_amount,
           s.stone_name,
           s.stone_type,
           p.tax_percentage,
-          v.company_name as vendor_name,
-          p.invoice_date
+          p.invoice_date,
+          h.code as hsn_code,
+          v.company_name as vendor_name
         FROM procurement_items pi
         JOIN procurements p ON pi.procurement_id = p.id
         JOIN vendors v ON p.vendor_id = v.id
         JOIN stones s ON pi.stone_id = s.id
+        LEFT JOIN hsn_codes h ON pi.hsn_code_id = h.id
         WHERE p.vendor_id = ?
       `;
       
@@ -92,7 +95,7 @@ class ProcurementItem {
         query += ' AND ' + conditions.join(' AND ');
       }
 
-      query += ' ORDER BY p.invoice_date DESC, pi.created_at DESC';
+      query += ' ORDER BY p.invoice_date DESC, pi.id DESC';
 
       const [rows] = await db.execute(query, params);
       return rows.map(row => new ProcurementItem(row));

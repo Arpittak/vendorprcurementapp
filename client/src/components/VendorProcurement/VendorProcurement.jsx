@@ -87,16 +87,55 @@ const VendorProcurement = ({ vendor, onBack }) => {
     }
   };
 
-  const handleFilterChange = (field, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
 
-  const handleApplyFilters = () => {
-    fetchProcurementItems();
-  };
+  const validateDateRange = (startDate, endDate) => {
+  const errors = [];
+  
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (start > end) {
+      errors.push("End date must be after start date");
+    }
+    
+    // Optional: Check if dates are not in future
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    if (start > today) {
+      errors.push("Start date cannot be in the future");
+    }
+    
+    if (end > today) {
+      errors.push("End date cannot be in the future");
+    }
+  }
+  
+  return errors;
+};
+
+ const handleFilterChange = (field, value) => {
+  setFilters((prev) => {
+    const newFilters = { ...prev, [field]: value };
+    
+    // Validate dates when either date changes
+    if (field === 'startDate' || field === 'endDate') {
+      const dateErrors = validateDateRange(
+        field === 'startDate' ? value : prev.startDate,
+        field === 'endDate' ? value : prev.endDate
+      );
+      
+      if (dateErrors.length > 0) {
+        setError(dateErrors.join('. '));
+      } else {
+        setError(null); // Clear date-related errors
+      }
+    }
+    
+    return newFilters;
+  });
+};
 
   const handleClearFilters = () => {
     setFilters({
@@ -111,43 +150,97 @@ const VendorProcurement = ({ vendor, onBack }) => {
     }, 100);
   };
 
-  const handleDownloadPDF = async () => {
-    try {
-      setPdfLoading(true);
-      setError(null);
+  // Enhanced handleDownloadPDF function in VendorProcurement.jsx
 
-      const pdfData = {
-        vendorId: vendor.id,
-        startDate: filters.startDate || undefined,
-        endDate: filters.endDate || undefined,
-        stoneType: filters.stoneType || undefined,
-        stoneName: filters.stoneName || undefined,
-      };
+const handleDownloadPDF = async () => {
+  try {
+    setPdfLoading(true);
+    setError(null);
 
-      const response = await vendorProcurementApi.generatePDF(pdfData);
-
-      // Create blob and download
-      const blob = new Blob([response.data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-
-      // Generate filename
-      const timestamp = new Date().toISOString().slice(0, 10);
-      const vendorName = vendor.company_name.replace(/[^a-zA-Z0-9]/g, "_");
-      link.download = `vendor_procurement_${vendorName}_${timestamp}.pdf`;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setError("Failed to generate PDF. Please try again.");
-      console.error("Error generating PDF:", err);
-    } finally {
-      setPdfLoading(false);
+    // Validate date range before sending request
+    const dateErrors = validateDateRange(filters.startDate, filters.endDate);
+    if (dateErrors.length > 0) {
+      setError(dateErrors.join('. '));
+      return;
     }
-  };
+
+    // Check if there are items to export
+    if (items.length === 0) {
+      setError("No items to export. Please adjust your filters.");
+      return;
+    }
+
+    // Warn if too many items (might cause memory issues)
+    if (items.length > 1000) {
+      if (!window.confirm(`You are about to export ${items.length} items. This might take a while. Continue?`)) {
+        return;
+      }
+    }
+
+    const pdfData = {
+      vendorId: vendor.id,
+      startDate: filters.startDate || undefined,
+      endDate: filters.endDate || undefined,
+      stoneType: filters.stoneType || undefined,
+      stoneName: filters.stoneName || undefined,
+    };
+
+    console.log('Generating PDF with data:', pdfData);
+
+    const response = await vendorProcurementApi.generatePDF(pdfData);
+
+    // Validate response
+    if (!response.data || response.data.size === 0) {
+      throw new Error('Empty PDF received from server');
+    }
+
+    // Create blob and download
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+
+    // Generate descriptive filename
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const vendorName = vendor.company_name.replace(/[^a-zA-Z0-9]/g, "_");
+    const filterSuffix = filters.stoneType ? `_${filters.stoneType}` : '';
+    link.download = `vendor_procurement_${vendorName}${filterSuffix}_${timestamp}.pdf`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    console.log('PDF downloaded successfully');
+
+  } catch (err) {
+    console.error("PDF generation error:", err);
+    
+    // Extract user-friendly error message
+    let errorMessage = "Failed to generate PDF. Please try again.";
+    
+    if (err.response?.data) {
+      // If error response is JSON
+      if (typeof err.response.data === 'string') {
+        errorMessage = err.response.data;
+      } else if (err.response.data.error) {
+        errorMessage = err.response.data.error;
+      }
+    } else if (err.message) {
+      if (err.message.includes('timeout')) {
+        errorMessage = "PDF generation timed out. Please try with fewer items or a smaller date range.";
+      } else if (err.message.includes('Network Error')) {
+        errorMessage = "Network error. Please check your connection and try again.";
+      } else {
+        errorMessage = err.message;
+      }
+    }
+    
+    setError(errorMessage);
+  } finally {
+    setPdfLoading(false);
+  }
+};
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-IN", {

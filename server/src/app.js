@@ -13,10 +13,9 @@ const app = express();
 
 app.use(cors({
   origin: [
-    'http://localhost:5173',
     'http://localhost:5174',
-    'https://68fc0121be8a.ngrok-free.app', // Add your ngrok URL
-    'http://68fc0121be8a.ngrok-free.app'   // Both http and https
+    'https://96a55ecfb27f.ngrok-free.app', // Add your ngrok URL
+    'http://96a55ecfb27f.ngrok-free.app'  // Both http and https
   ],
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization']
