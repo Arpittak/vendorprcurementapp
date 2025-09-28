@@ -9,8 +9,15 @@ const { CustomError } = require('./utils/errors');
 const app = express();
 
 // Middleware
+// In server/src/app.js - Update CORS for ngrok
+
 app.use(cors({
-  origin: 'http://localhost:5174',
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://68fc0121be8a.ngrok-free.app', // Add your ngrok URL
+    'http://68fc0121be8a.ngrok-free.app'   // Both http and https
+  ],
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));

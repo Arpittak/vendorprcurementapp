@@ -5,16 +5,17 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    port: 5174,
     proxy: {
-      // Any request that starts with "/api" will be forwarded
+      // Proxy API requests to your local backend
       '/api': {
-        target: 'http://localhost:5001', // Update to your current backend port
+        target: 'http://localhost:5001',
         changeOrigin: true,
+        secure: false,
       },
     },
-    // Update with your current ngrok URL
     allowedHosts: [
-      '1116e39ab0a8.ngrok-free.app', // Your current ngrok URL
+      '68fc0121be8a.ngrok-free.app', // Your ngrok URL without protocol
       'localhost',
       '127.0.0.1',
     ],
