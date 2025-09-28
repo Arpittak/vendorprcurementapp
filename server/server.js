@@ -3,6 +3,21 @@ const testDb = require('./src/utils/testDb');
 
 const PORT = process.env.PORT || 5001;
 
+// Add graceful shutdown for PDF queue
+process.on('SIGTERM', async () => {
+  console.log('Received SIGTERM, shutting down gracefully...');
+  const pdfQueue = require('./src/services/PDFQueue');
+  await pdfQueue.shutdown();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  const pdfQueue = require('./src/services/PDFQueue');
+  await pdfQueue.shutdown();
+  process.exit(0);
+});
+
 // Test database connection on startup
 testDb().then((success) => {
   if (success) {

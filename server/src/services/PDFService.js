@@ -6,29 +6,33 @@ const { logMemoryUsage } = require('../utils/memoryMonitor');
 
 class PDFService {
 
-  static async generateVendorProcurementReport(data, retryCount = 0) {
-    let browser = null;
+  static async generateVendorProcurementReport(data, sharedBrowser = null, retryCount = 0) {
+    let browser = sharedBrowser;
+    let shouldCloseBrowser = false;
     const maxRetries = 1;
+    let context = null;
+    let page = null;
 
     try {
       logMemoryUsage('Before PDF generation');
 
-      // Launch browser with timeout
-      browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor'
-        ],
-        timeout: 30000 // 30 second timeout
-      });
+      if (!browser) {
+        const { chromium } = require('playwright');
+        browser = await chromium.launch({
+          headless: true,
+          args: ['--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor'],
+          timeout: 30000
+        });
+        shouldCloseBrowser = true;
+      }
 
-      const context = await browser.newContext();
-      const page = await context.newPage();
+      context = await browser.newContext();
+      page = await context.newPage();
 
       // Set timeout for page operations
       page.setDefaultTimeout(30000);
@@ -65,7 +69,7 @@ class PDFService {
         console.log(`Retrying PDF generation... (${retryCount + 1}/${maxRetries})`);
 
         // Clean up before retry
-        if (browser) {
+        if (shouldCloseBrowser && browser) {
           try {
             await browser.close();
           } catch (closeError) {
@@ -76,7 +80,7 @@ class PDFService {
         // Wait a bit before retry
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        return PDFService.generateVendorProcurementReport(data, retryCount + 1);
+        return PDFService.generateVendorProcurementReport(data, null, retryCount + 1);
       }
 
       // Transform error to user-friendly message
@@ -84,15 +88,20 @@ class PDFService {
       throw new DatabaseError(userMessage);
 
     } finally {
-      if (browser) {
-        try {
+      try {
+        // Clean up context and page first
+        if (page) await page.close();
+        if (context) await context.close();
+
+        // Only close browser if we created it (not shared)
+        if (shouldCloseBrowser && browser) {
           await browser.close();
           if (global.gc) {
             global.gc();
           }
-        } catch (closeError) {
-          console.error('Error during cleanup:', closeError);
         }
+      } catch (closeError) {
+        console.error('Error during cleanup:', closeError);
       }
       logMemoryUsage('After cleanup');
     }
@@ -127,31 +136,31 @@ class PDFService {
     return `PDF generation failed: ${error.message}. Please try again.`;
   }
 
- static generateEnhancedHTMLReport({ vendor, items, stats, filters }) {
-  const currentDate = new Date().toLocaleDateString('en-IN');
+  static generateEnhancedHTMLReport({ vendor, items, stats, filters }) {
+    const currentDate = new Date().toLocaleDateString('en-IN');
 
-  // Helper function for consistent calculation (DEFINE FIRST)
-  function calculateTotalWithGst(itemAmount, taxPercentage) {
-    const amount = Number(itemAmount) || 0;
-    const tax = Number(taxPercentage) || 0;
-    const gstAmount = (amount * tax) / 100;
-    return amount + gstAmount;
-  }
+    // Helper function for consistent calculation (DEFINE FIRST)
+    function calculateTotalWithGst(itemAmount, taxPercentage) {
+      const amount = Number(itemAmount) || 0;
+      const tax = Number(taxPercentage) || 0;
+      const gstAmount = (amount * tax) / 100;
+      return amount + gstAmount;
+    }
 
-  // Calculate totals using the helper function (CALCULATE SECOND)
-  let totalAmountWithGst = 0;
-  items.forEach(item => {
-    totalAmountWithGst += calculateTotalWithGst(item.itemAmount, item.taxPercentage);
-  });
+    // Calculate totals using the helper function (CALCULATE SECOND)
+    let totalAmountWithGst = 0;
+    items.forEach(item => {
+      totalAmountWithGst += calculateTotalWithGst(item.itemAmount, item.taxPercentage);
+    });
 
-  // Generate filter info
-  const appliedFilters = [];
-  if (filters.startDate) appliedFilters.push(`From: ${new Date(filters.startDate).toLocaleDateString('en-IN')}`);
-  if (filters.endDate) appliedFilters.push(`To: ${new Date(filters.endDate).toLocaleDateString('en-IN')}`);
-  if (filters.stoneType) appliedFilters.push(`Stone Type: ${filters.stoneType}`);
-  if (filters.stoneName) appliedFilters.push(`Stone Name: ${filters.stoneName}`);
+    // Generate filter info
+    const appliedFilters = [];
+    if (filters.startDate) appliedFilters.push(`From: ${new Date(filters.startDate).toLocaleDateString('en-IN')}`);
+    if (filters.endDate) appliedFilters.push(`To: ${new Date(filters.endDate).toLocaleDateString('en-IN')}`);
+    if (filters.stoneType) appliedFilters.push(`Stone Type: ${filters.stoneType}`);
+    if (filters.stoneName) appliedFilters.push(`Stone Name: ${filters.stoneName}`);
 
-  return `
+    return `
   <!DOCTYPE html>
   <html>
   <head>
@@ -304,11 +313,11 @@ class PDFService {
       </thead>
       <tbody>
         ${items.map((item, index) => {
-          const amount = Number(item.itemAmount) || 0;
-          const tax = Number(item.taxPercentage) || 0;
-          const gstAmount = (amount * tax) / 100;
-          const totalWithGst = amount + gstAmount;
-          return `
+      const amount = Number(item.itemAmount) || 0;
+      const tax = Number(item.taxPercentage) || 0;
+      const gstAmount = (amount * tax) / 100;
+      const totalWithGst = amount + gstAmount;
+      return `
           <tr>
             <td>${index + 1}</td>
             <td>${item.stoneName}/${item.stoneType}</td>
@@ -319,7 +328,7 @@ class PDFService {
             <td class="amount">₹${totalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
           </tr>
           `;
-        }).join('')}
+    }).join('')}
         <tr class="total-row">
           <td colspan="6"><strong>GRAND TOTAL</strong></td>
           <td class="amount"><strong>₹${Number(totalAmountWithGst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></td>
@@ -334,7 +343,7 @@ class PDFService {
   </body>
   </html>
   `;
-}
+  }
 
 }
 
