@@ -12,10 +12,10 @@ const VendorProcurement = ({ vendor, onBack }) => {
 
   // Filter states
   const [filters, setFilters] = useState({
-    startDate: "",
-    endDate: new Date().toISOString().split("T")[0],
-    stoneType: "",
-    stoneName: "",
+    startDate: '',
+    endDate: '',
+    stoneType: '',
+    stoneName: '',
   });
 
   // Filter options
@@ -32,10 +32,7 @@ const VendorProcurement = ({ vendor, onBack }) => {
     fetchProcurementItems();
   }, []);
 
-  useEffect(() => {
-    fetchProcurementItems();
-  }, [filters]);
-
+ 
   useEffect(() => {
   if (filters.stoneType) {
     fetchStoneNames(filters.stoneType);
@@ -62,30 +59,44 @@ const VendorProcurement = ({ vendor, onBack }) => {
     }
   };
 
-  const fetchProcurementItems = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+ const fetchProcurementItems = async (customFilters = null) => {
+  try {
 
-      const cleanFilters = {};
-      if (filters.startDate) cleanFilters.startDate = filters.startDate;
-      if (filters.endDate) cleanFilters.endDate = filters.endDate;
-      if (filters.stoneType) cleanFilters.stoneType = filters.stoneType;
-      if (filters.stoneName) cleanFilters.stoneName = filters.stoneName;
+    const scrollPosition = window.scrollY;
 
-      const response = await vendorProcurementApi.getVendorProcurementItems(
-        vendor.id,
-        cleanFilters
-      );
-      setItems(response.data.data.items || []);
-      setStats(response.data.data.stats || {});
-    } catch (err) {
-      setError("Failed to fetch procurement items. Please try again.");
-      console.error("Error fetching procurement items:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setLoading(true);
+    setError(null);
+
+    const filtersToUse = customFilters || filters;
+    
+    const cleanFilters = {};
+    if (filtersToUse.startDate) cleanFilters.startDate = filtersToUse.startDate;
+    if (filtersToUse.endDate) cleanFilters.endDate = filtersToUse.endDate;
+    if (filtersToUse.stoneType) cleanFilters.stoneType = filtersToUse.stoneType;
+    if (filtersToUse.stoneName) cleanFilters.stoneName = filtersToUse.stoneName;
+
+    console.log('Sending filters:', cleanFilters);
+
+    const response = await vendorProcurementApi.getVendorProcurementItems(
+      vendor.id,
+      cleanFilters
+    );
+    setItems(response.data.data.items || []);
+    setStats(response.data.data.stats || {});
+
+    // Restore scroll position after state updates
+    setTimeout(() => {
+      window.scrollTo(0, scrollPosition);
+    }, 0);
+
+
+  } catch (err) {
+    setError("Failed to fetch procurement items. Please try again.");
+    console.error("Error fetching procurement items:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   const validateDateRange = (startDate, endDate) => {
@@ -98,57 +109,50 @@ const VendorProcurement = ({ vendor, onBack }) => {
     if (start > end) {
       errors.push("End date must be after start date");
     }
-    
-    // Optional: Check if dates are not in future
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // End of today
-    
-    if (start > today) {
-      errors.push("Start date cannot be in the future");
-    }
-    
-    if (end > today) {
-      errors.push("End date cannot be in the future");
-    }
   }
-  
   return errors;
 };
 
  const handleFilterChange = (field, value) => {
-  setFilters((prev) => {
-    const newFilters = { ...prev, [field]: value };
+  const updatedFilters = {
+    ...filters,
+    [field]: value
+  };
+  
+  // Clear stone name when stone type changes
+  if (field === 'stoneType') {
+    updatedFilters.stoneName = '';
+  }
+  
+  // Validate dates
+  if (field === 'startDate' || field === 'endDate') {
+    const dateErrors = validateDateRange(updatedFilters.startDate, updatedFilters.endDate);
     
-    // Validate dates when either date changes
-    if (field === 'startDate' || field === 'endDate') {
-      const dateErrors = validateDateRange(
-        field === 'startDate' ? value : prev.startDate,
-        field === 'endDate' ? value : prev.endDate
-      );
-      
-      if (dateErrors.length > 0) {
-        setError(dateErrors.join('. '));
-      } else {
-        setError(null); // Clear date-related errors
-      }
+    if (dateErrors.length > 0) {
+      setError(dateErrors.join('. '));
+      return;
+    } else {
+      setError(null);
     }
-    
-    return newFilters;
-  });
+  }
+  
+  setFilters(updatedFilters);
+  fetchProcurementItems(updatedFilters); // Pass filters directly
 };
-
-  const handleClearFilters = () => {
-    setFilters({
+ const handleClearFilters = () => {
+  const clearedFilters = {
     startDate: '',
-    endDate: new Date().toISOString().split('T')[0],
+    endDate: '',
     stoneType: '',
     stoneName: ''
-  });
-    // Will trigger useEffect to fetch unfiltered data
-    setTimeout(() => {
-      fetchProcurementItems();
-    }, 100);
   };
+  
+  setFilters(clearedFilters);
+  setError(null);
+  
+  // Pass cleared filters directly to avoid state delay
+  fetchProcurementItems(clearedFilters);
+};
 
   // Enhanced handleDownloadPDF function in VendorProcurement.jsx
 

@@ -3,7 +3,7 @@ class PDFQueue {
   constructor() {
     this.queue = [];
     this.processing = false;
-    this.maxQueueSize = 10; // Prevent memory bloat from too many queued requests
+    this.maxQueueSize = 1000; // Prevent memory bloat from too many queued requests
     this.browserInstance = null; // Reuse single browser instance
     this.lastActivity = Date.now();
     this.browserTimeout = 5 * 60 * 1000; // 5 minutes browser idle timeout
