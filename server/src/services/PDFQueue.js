@@ -3,10 +3,12 @@ class PDFQueue {
   constructor() {
     this.queue = [];
     this.processing = false;
-    this.maxQueueSize = 1000; // Prevent memory bloat from too many queued requests
+    this.maxQueueSize = 10; // Prevent memory bloat from too many queued requests
     this.browserInstance = null; // Reuse single browser instance
     this.lastActivity = Date.now();
     this.browserTimeout = 5 * 60 * 1000; // 5 minutes browser idle timeout
+    this.pdfCount = 0;
+    this.maxPdfsBeforeRestart = 30;
     
     // Start browser cleanup timer
     this.startBrowserCleanupTimer();
@@ -59,30 +61,57 @@ class PDFQueue {
           clearTimeout(request.timeout);
         }
 
-        try {
-          console.log(`Processing PDF request (${this.queue.length} remaining)`);
-          
-          const PDFService = require('./PDFService');
-          
-          // Pass the shared browser instance to PDFService
-          const pdfBuffer = await PDFService.generateVendorProcurementReport(
-            request.data, 
-            this.browserInstance
-          );
-          
-          this.lastActivity = Date.now();
-          request.resolve(pdfBuffer);
-          
-          // Force garbage collection after each PDF
-          if (global.gc) {
-            global.gc();
-          }
-          
-        } catch (error) {
-          console.error('PDF generation error:', error);
-          request.reject(error);
-        }
-
+       try {
+  console.log(`Processing PDF request (${this.queue.length} remaining)`);
+  
+  const PDFService = require('./PDFService');
+  
+  // Add timeout promise
+  const pdfPromise = PDFService.generateVendorProcurementReport(
+    request.data, 
+    this.browserInstance
+  );
+  
+  const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('PDF generation hung')), 30000) // 30 second timeout
+  );
+  
+  const pdfBuffer = await Promise.race([pdfPromise, timeoutPromise]);
+  
+  this.lastActivity = Date.now();
+  request.resolve(pdfBuffer);
+  
+  this.pdfCount++;
+  
+  // Restart browser every 40 PDFs
+  if (this.pdfCount >= this.maxPdfsBeforeRestart) {
+    console.log(`Restarting browser after ${this.pdfCount} PDFs...`);
+    await this.browserInstance.close();
+    this.browserInstance = null;
+    this.pdfCount = 0;
+    await this.ensureBrowserInstance();
+    console.log('Browser restarted successfully');
+  }
+  
+  if (global.gc) {
+    global.gc();
+  }
+  
+} catch (error) {
+  console.error('PDF generation error:', error);
+  
+  // If PDF hung, force restart browser
+  if (error.message === 'PDF generation hung') {
+    console.log('PDF hung detected - force restarting browser...');
+    try {
+      await this.browserInstance.close();
+    } catch (e) {}
+    this.browserInstance = null;
+    this.pdfCount = 0;
+  }
+  
+  request.reject(error);
+}
         // Small delay between requests to prevent memory spikes
         await new Promise(resolve => setTimeout(resolve, 100));
       }

@@ -12,11 +12,11 @@ Install dependencies:
 
 
 npm install
+npx playwright install
 
-Run the server with nodemon:
+Run the server with nodemon: nodemon server.js
+
 This will start the server and automatically restart it when you make changes to the code.
-
-npm run dev
 
 
 Frontend Setup (Client)
@@ -33,3 +33,10 @@ npm install
 Run the frontend development server:
 
 npm run dev
+
+
+all done now to test 
+open new terminal 
+cd server
+node test-pdf-load.js 
+note:make sure you have data in your procurement try to change vendor id in it also
