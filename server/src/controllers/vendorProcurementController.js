@@ -47,7 +47,7 @@ class VendorProcurementController {
   static async getVendorProcurementItems(req, res, next) {
     try {
       const { id } = req.params;
-      const { startDate, endDate, stoneType, stoneName } = req.query;
+      const { startDate, endDate, stoneType, stoneName, page, limit } = req.query;
       
       if (!id || isNaN(id)) {
         throw new ValidationError('Valid vendor ID is required');
@@ -65,17 +65,25 @@ class VendorProcurementController {
       if (stoneType) filters.stoneType = stoneType;
       if (stoneName) filters.stoneName = stoneName;
 
-      // Get procurement items and stats
-      const [items, stats] = await Promise.all([
-        ProcurementItem.findByVendorId(vendorId, filters),
-        ProcurementItem.getStatsByVendorId(vendorId, filters)
-      ]);
+      // Pagination parameters
+const pagination = {
+  page: parseInt(page) || 1,
+  limit: parseInt(limit) || 10
+};
 
+// Get procurement items with pagination and stats
+const [result, stats] = await Promise.all([
+  ProcurementItem.findByVendorId(vendorId, filters, pagination),
+  ProcurementItem.getStatsByVendorId(vendorId, filters)
+]);
+
+      
       res.json({
         success: true,
         data: {
-          items,
+          items: result.items,
           stats,
+          pagination: result.pagination,
           filters: {
             vendorId,
             startDate: startDate || null,
@@ -84,7 +92,7 @@ class VendorProcurementController {
             stoneName: stoneName || null
           }
         },
-        message: `Found ${items.length} procurement items`
+        message: `Found ${result.pagination.totalItems} procurement items`
       });
     } catch (error) {
       next(error);

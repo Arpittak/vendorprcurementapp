@@ -23,7 +23,7 @@ async function testPDFLoad() {
       params,
       { 
         responseType: 'stream',
-        timeout: 60000 // 60 second timeout
+        timeout: 300000 // 60 second timeout
       }
     ).then(response => {
       const filePath = path.join(__dirname, 'test-pdfs', `output_${i}.pdf`);

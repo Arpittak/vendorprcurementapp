@@ -8,17 +8,43 @@ const { CustomError } = require('./utils/errors');
 
 const app = express();
 
-// Middleware
-// In server/src/app.js - Update CORS for ngrok
-
+// Middleware with dynamic CORS - no need to hardcode ngrok URLs
 app.use(cors({
-  origin: [
-    'http://localhost:5174',
-    'https://96a55ecfb27f.ngrok-free.app', // Add your ngrok URL
-    'http://96a55ecfb27f.ngrok-free.app'  // Both http and https
-  ],
+  origin: (origin, callback) => {
+    // Log for debugging (optional - remove in production)
+    console.log('Request from origin:', origin);
+    
+    // Allow requests with no origin (Postman, server-to-server, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Explicitly allowed origins
+    const allowedOrigins = [
+      'http://localhost:5174',     // Your Vite dev server
+      'http://127.0.0.1:5174',
+    ];
+    
+    // Check if origin is in the allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Allow ANY ngrok domain (both http and https)
+    // This covers ngrok.io, ngrok-free.app, and ngrok.app
+    if (origin.includes('ngrok.io') || 
+        origin.includes('ngrok-free.app') || 
+        origin.includes('ngrok.app')) {
+      return callback(null, true);
+    }
+    
+    // If origin doesn't match, block it
+    console.log('Blocked origin:', origin);
+    callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true  // Include if you need cookies/sessions
 }));
 
 app.use(express.json());

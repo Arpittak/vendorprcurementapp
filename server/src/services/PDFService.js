@@ -306,6 +306,7 @@ class PDFService {
           <th>Stone Name/Type</th>
           <th>Dimensions (mm)</th>
           <th>Quantity</th>
+          <th>Date</th>
           <th>Item Amount</th>
           <th>GST %</th>
           <th>Total (After GST)</th>
@@ -323,6 +324,7 @@ class PDFService {
             <td>${item.stoneName}/${item.stoneType}</td>
             <td>${item.lengthMm} x ${item.widthMm}${item.thicknessMm ? ' x ' + item.thicknessMm : ''}</td>
             <td>${item.quantity} ${item.units}</td>
+            <td>${new Date(item.createdAt).toLocaleDateString('en-IN')}</td>
             <td class="amount">₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
             <td>${tax}%</td>
             <td class="amount">₹${totalWithGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -330,7 +332,7 @@ class PDFService {
           `;
     }).join('')}
         <tr class="total-row">
-          <td colspan="6"><strong>GRAND TOTAL</strong></td>
+          <td colspan="7"><strong>GRAND TOTAL</strong></td>
           <td class="amount"><strong>₹${Number(totalAmountWithGst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></td>
         </tr>
       </tbody>

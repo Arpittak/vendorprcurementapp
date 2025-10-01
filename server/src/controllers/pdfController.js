@@ -4,7 +4,7 @@ const ProcurementItem = require('../models/ProcurementItem');
 const { ValidationError } = require('../utils/errors');
 
 class PDFController {
-  
+
   static async generateVendorProcurementPDF(req, res, next) {
     try {
       const { vendorId, startDate, endDate, stoneType, stoneName } = req.body;
@@ -25,10 +25,12 @@ class PDFController {
       if (stoneName) filters.stoneName = stoneName;
 
       // Get procurement items and stats
-      const [items, stats] = await Promise.all([
-        ProcurementItem.findByVendorId(vendorId, filters),
+      const [result, stats] = await Promise.all([
+        ProcurementItem.findByVendorId(vendorId, filters, { page: 1, limit: 999999 }),
         ProcurementItem.getStatsByVendorId(vendorId, filters)
       ]);
+
+      const items = result.items;
 
       if (items.length === 0) {
         throw new ValidationError('No procurement items found for the specified filters');

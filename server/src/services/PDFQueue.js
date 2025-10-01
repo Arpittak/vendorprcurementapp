@@ -3,13 +3,13 @@ class PDFQueue {
   constructor() {
     this.queue = [];
     this.processing = false;
-    this.maxQueueSize = 10; // Prevent memory bloat from too many queued requests
+    this.maxQueueSize = 100; // Prevent memory bloat from too many queued requests
     this.browserInstance = null; // Reuse single browser instance
     this.lastActivity = Date.now();
     this.browserTimeout = 5 * 60 * 1000; // 5 minutes browser idle timeout
     this.pdfCount = 0;
     this.maxPdfsBeforeRestart = 30;
-    
+
     // Start browser cleanup timer
     this.startBrowserCleanupTimer();
   }
@@ -33,7 +33,7 @@ class PDFQueue {
             this.queue.splice(index, 1);
             reject(new Error('PDF generation request timed out'));
           }
-        }, 60000) // 1 minute timeout per request
+        }, 300000) // 1 minute timeout per request
       };
 
       this.queue.push(request);
@@ -55,63 +55,63 @@ class PDFQueue {
 
       while (this.queue.length > 0) {
         const request = this.queue.shift();
-        
+
         // Clear timeout since we're processing
         if (request.timeout) {
           clearTimeout(request.timeout);
         }
 
-       try {
-  console.log(`Processing PDF request (${this.queue.length} remaining)`);
-  
-  const PDFService = require('./PDFService');
-  
-  // Add timeout promise
-  const pdfPromise = PDFService.generateVendorProcurementReport(
-    request.data, 
-    this.browserInstance
-  );
-  
-  const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error('PDF generation hung')), 30000) // 30 second timeout
-  );
-  
-  const pdfBuffer = await Promise.race([pdfPromise, timeoutPromise]);
-  
-  this.lastActivity = Date.now();
-  request.resolve(pdfBuffer);
-  
-  this.pdfCount++;
-  
-  // Restart browser every 40 PDFs
-  if (this.pdfCount >= this.maxPdfsBeforeRestart) {
-    console.log(`Restarting browser after ${this.pdfCount} PDFs...`);
-    await this.browserInstance.close();
-    this.browserInstance = null;
-    this.pdfCount = 0;
-    await this.ensureBrowserInstance();
-    console.log('Browser restarted successfully');
-  }
-  
-  if (global.gc) {
-    global.gc();
-  }
-  
-} catch (error) {
-  console.error('PDF generation error:', error);
-  
-  // If PDF hung, force restart browser
-  if (error.message === 'PDF generation hung') {
-    console.log('PDF hung detected - force restarting browser...');
-    try {
-      await this.browserInstance.close();
-    } catch (e) {}
-    this.browserInstance = null;
-    this.pdfCount = 0;
-  }
-  
-  request.reject(error);
-}
+        try {
+          console.log(`Processing PDF request (${this.queue.length} remaining)`);
+
+          const PDFService = require('./PDFService');
+
+          // Add timeout promise
+          const pdfPromise = PDFService.generateVendorProcurementReport(
+            request.data,
+            this.browserInstance
+          );
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('PDF generation hung')), 30000) // 30 second timeout
+          );
+
+          const pdfBuffer = await Promise.race([pdfPromise, timeoutPromise]);
+
+          this.lastActivity = Date.now();
+          request.resolve(pdfBuffer);
+
+          this.pdfCount++;
+
+          // Restart browser every 40 PDFs
+          if (this.pdfCount >= this.maxPdfsBeforeRestart) {
+            console.log(`Restarting browser after ${this.pdfCount} PDFs...`);
+            await this.browserInstance.close();
+            this.browserInstance = null;
+            this.pdfCount = 0;
+            await this.ensureBrowserInstance();
+            console.log('Browser restarted successfully');
+          }
+
+          if (global.gc) {
+            global.gc();
+          }
+
+        } catch (error) {
+          console.error('PDF generation error:', error);
+
+          // If PDF hung, force restart browser
+          if (error.message === 'PDF generation hung') {
+            console.log('PDF hung detected - force restarting browser...');
+            try {
+              await this.browserInstance.close();
+            } catch (e) { }
+            this.browserInstance = null;
+            this.pdfCount = 0;
+          }
+
+          request.reject(error);
+        }
         // Small delay between requests to prevent memory spikes
         await new Promise(resolve => setTimeout(resolve, 100));
       }
@@ -124,7 +124,7 @@ class PDFQueue {
   async ensureBrowserInstance() {
     if (!this.browserInstance || !this.browserInstance.isConnected()) {
       console.log('Creating new browser instance...');
-      
+
       // Close existing browser if it exists
       if (this.browserInstance) {
         try {
@@ -135,7 +135,7 @@ class PDFQueue {
       }
 
       const { chromium } = require('playwright');
-      
+
       this.browserInstance = await chromium.launch({
         headless: true,
         args: [
@@ -162,8 +162,8 @@ class PDFQueue {
     setInterval(async () => {
       // Close browser if idle for too long and no processing is happening
       if (
-        this.browserInstance && 
-        !this.processing && 
+        this.browserInstance &&
+        !this.processing &&
         this.queue.length === 0 &&
         (Date.now() - this.lastActivity) > this.browserTimeout
       ) {
@@ -171,7 +171,7 @@ class PDFQueue {
         try {
           await this.browserInstance.close();
           this.browserInstance = null;
-          
+
           // Force garbage collection
           if (global.gc) {
             global.gc();
@@ -185,7 +185,7 @@ class PDFQueue {
 
   async shutdown() {
     console.log('Shutting down PDF queue...');
-    
+
     // Clear all pending requests
     while (this.queue.length > 0) {
       const request = this.queue.shift();

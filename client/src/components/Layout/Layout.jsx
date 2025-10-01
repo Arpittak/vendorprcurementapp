@@ -19,7 +19,7 @@ const Layout = ({ children }) => {
           <nav className="sidebar-nav">
             <div className="nav-item active">
               <FileBarChart size={20} />
-              <span>Vendor Procurement</span>
+              <span>Procurement item by vendor</span>
             </div>
           </nav>
         </aside>

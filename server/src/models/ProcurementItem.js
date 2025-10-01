@@ -38,72 +38,99 @@ class ProcurementItem {
     return dimensions.join(' x ') + ' mm';
   }
 
-  static async findByVendorId(vendorId, filters = {}) {
+  static async findByVendorId(vendorId, filters = {}, pagination = {}) {
   try {
-    let query = `
-      SELECT 
-        pi.id,
-        pi.length_mm,
-        pi.width_mm,
-        pi.thickness_mm,
-        pi.quantity,
-        pi.units,
-        pi.rate,
-        pi.rate_unit,
-        pi.item_amount,
-        pi.created_at,  -- Add this to see the date
-        s.stone_name,
-        s.stone_type,
-        p.tax_percentage,
-        p.invoice_date,
-        h.code as hsn_code,
-        v.company_name as vendor_name
-      FROM procurement_items pi
-      JOIN procurements p ON pi.procurement_id = p.id
-      JOIN vendors v ON p.vendor_id = v.id
-      JOIN stones s ON pi.stone_id = s.id
-      LEFT JOIN hsn_codes h ON pi.hsn_code_id = h.id
-      WHERE p.vendor_id = ?
-    `;
-    
-    const conditions = [];
+    const { page = 1, limit = 10 } = pagination;
+    const offset = (page - 1) * limit;
+
+    // Build base query parts
+    let whereClause = 'WHERE p.vendor_id = ?';
     const params = [vendorId];
 
-    // Change from p.invoice_date to pi.created_at
+    // Add filter conditions
     if (filters.startDate) {
-      conditions.push('DATE(pi.created_at) >= ?');
+      whereClause += ' AND DATE(pi.created_at) >= ?';
       params.push(filters.startDate);
     }
 
     if (filters.endDate) {
-      conditions.push('DATE(pi.created_at) <= ?');
+      whereClause += ' AND DATE(pi.created_at) <= ?';
       params.push(filters.endDate);
     }
 
-    // Stone filters remain same
     if (filters.stoneType) {
-      conditions.push('s.stone_type = ?');
+      whereClause += ' AND s.stone_type = ?';
       params.push(filters.stoneType);
     }
 
     if (filters.stoneName) {
-      conditions.push('s.stone_name = ?');
+      whereClause += ' AND s.stone_name = ?';
       params.push(filters.stoneName);
     }
 
-    if (conditions.length > 0) {
-      query += ' AND ' + conditions.join(' AND ');
-    }
+    // Count query
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM procurement_items pi
+      JOIN procurements p ON pi.procurement_id = p.id
+      JOIN stones s ON pi.stone_id = s.id
+      ${whereClause}
+    `;
 
-    query += ' ORDER BY pi.created_at DESC, pi.id DESC';
+    const [countResult] = await db.execute(countQuery, params);
+    const totalItems = countResult[0].total;
 
-    const [rows] = await db.execute(query, params);
-    return rows.map(row => new ProcurementItem(row));
+    // Main query with pagination
+    // Main query with pagination
+const mainQuery = `
+  SELECT 
+    pi.id,
+    pi.length_mm,
+    pi.width_mm,
+    pi.thickness_mm,
+    pi.quantity,
+    pi.units,
+    pi.rate,
+    pi.rate_unit,
+    pi.item_amount,
+    pi.created_at,
+    s.stone_name,
+    s.stone_type,
+    p.tax_percentage,
+    p.invoice_date,
+    h.code as hsn_code,
+    v.company_name as vendor_name
+  FROM procurement_items pi
+  JOIN procurements p ON pi.procurement_id = p.id
+  JOIN vendors v ON p.vendor_id = v.id
+  JOIN stones s ON pi.stone_id = s.id
+  LEFT JOIN hsn_codes h ON pi.hsn_code_id = h.id
+  ${whereClause}
+  ORDER BY pi.created_at DESC, pi.id DESC
+  LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}
+`;
+
+const [rows] = await db.execute(mainQuery, params);
+
+    // const mainParams = [...params, parseInt(limit), parseInt(offset)];
+    // const [rows] = await db.execute(mainQuery, mainParams);
+    
+    return {
+      items: rows.map(row => new ProcurementItem(row)),
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems: totalItems,
+        itemsPerPage: limit,
+        hasNextPage: page < Math.ceil(totalItems / limit),
+        hasPreviousPage: page > 1
+      }
+    };
   } catch (error) {
+    console.error('Database error details:', error);
     throw new DatabaseError(`Failed to fetch procurement items: ${error.message}`);
   }
 }
-
  static async getStatsByVendorId(vendorId, filters = {}) {
   try {
     let query = `
@@ -119,14 +146,14 @@ class ProcurementItem {
     const params = [vendorId];
     const conditions = ['p.vendor_id = ?'];
 
-    // Change to pi.created_at
+    // Apply same filters as main query
     if (filters.startDate) {
-      conditions.push('DATE(pi.created_at) >= ?');
+      conditions.push('p.invoice_date >= ?');
       params.push(filters.startDate);
     }
 
     if (filters.endDate) {
-      conditions.push('DATE(pi.created_at) <= ?');
+      conditions.push('p.invoice_date <= ?');
       params.push(filters.endDate);
     }
 
